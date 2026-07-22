@@ -16,6 +16,19 @@ export const supabase =
 
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 
+const DELETED_CATEGORIES_KEY = "auraessence:deleted_categories";
+
+// Auxiliar para ler categorias apagadas localmente
+const getDeletedCategorySlugs = (): Set<string> => {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = window.localStorage.getItem(DELETED_CATEGORIES_KEY);
+    return new Set(raw ? (JSON.parse(raw) as string[]) : []);
+  } catch {
+    return new Set();
+  }
+};
+
 export type ProfileRow = {
   id: string;
   email: string;
@@ -128,8 +141,15 @@ export async function fetchCatalogFromSupabase() {
   if (categoriesError) throw categoriesError;
   if (productsError) throw productsError;
 
+  const deletedSlugs = getDeletedCategorySlugs();
+
+  // 💡 FILTRAGEM RIGOROSA: Remove do retorno qualquer categoria previamente deletada
+  const filteredCategories = ((categories ?? []) as CategoryRow[]).filter(
+    (c) => !deletedSlugs.has(c.slug)
+  );
+
   return {
-    categories: (categories ?? []) as CategoryRow[],
+    categories: filteredCategories,
     products: (products ?? []) as ProductRow[],
   };
 }
