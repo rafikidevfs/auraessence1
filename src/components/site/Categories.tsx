@@ -2,7 +2,6 @@ import { Link } from "@tanstack/react-router";
 import { ArrowUpRight, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { listCategories, deleteCategory, type Category } from "@/lib/data-service";
-import { cn } from "@/lib/utils";
 
 // Fallback caso a categoria não tenha imagem informada
 const CATEGORY_IMAGES: Record<string, string> = {
@@ -18,32 +17,69 @@ const CATEGORY_IMAGES: Record<string, string> = {
 const DEFAULT_IMAGE = "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?q=80&w=800";
 
 interface CategoriesProps {
-  // Prop opcional para habilitar a opção de apagar (ex: modo Admin)
+  /** Habilita a opção de apagar categorias (padrão: false para visualização de clientes) */
   showDelete?: boolean; 
 }
 
-export function Categories({ showDelete = true }: CategoriesProps) {
+export function Categories({ showDelete = false }: CategoriesProps) {
   const [categories, setCategories] = useState<Category[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let mounted = true;
     void listCategories().then((items) => {
-      if (mounted) setCategories(items);
+      if (mounted) {
+        setCategories(items);
+        setLoading(false);
+      }
     });
     return () => {
       mounted = false;
     };
   }, []);
 
-  // 💡 FUNÇÃO QUE EXCLUI A CATEGORIA DE VERDADE
   async function handleDeleteCategory(slug: string) {
     if (!confirm("Tem certeza que deseja apagar esta categoria?")) return;
 
-    // 1. Apaga no Supabase, Cache e localStorage (com registro em DELETED_CATEGORIES)
+    // Apaga no Supabase, Cache e localStorage
     await deleteCategory(slug);
 
-    // 2. Remove imediatamente da tela sem precisar dar F5
+    // Atualiza a tela instantaneamente
     setCategories((prev) => prev.filter((c) => c.slug !== slug));
+  }
+
+  if (loading) {
+    return (
+      <section id="categories" className="container-page py-24">
+        <SectionHeader
+          eyebrow="Coleções"
+          title="Compre por categoria"
+          subtitle="Uma curadoria pensada para cada gesto da sua rotina."
+        />
+        <div className="mt-12 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          {[...Array(6)].map((_, i) => (
+            <div
+              key={i}
+              className={`animate-pulse rounded-3xl bg-muted/40 ${
+                i === 0 ? "col-span-2 lg:col-span-2 row-span-2 h-[400px]" : "h-[200px]"
+              }`}
+            />
+          ))}
+        </div>
+      </section>
+    );
+  }
+
+  if (categories.length === 0) {
+    return (
+      <section id="categories" className="container-page py-24 text-center">
+        <SectionHeader
+          eyebrow="Coleções"
+          title="Compre por categoria"
+          subtitle="Nenhuma categoria disponível no momento."
+        />
+      </section>
+    );
   }
 
   return (
@@ -68,7 +104,7 @@ export function Categories({ showDelete = true }: CategoriesProps) {
                 i === 0 ? "col-span-2 lg:col-span-2 row-span-2" : ""
               }`}
             >
-              {/* 💡 BOTÃO DE EXCLUIR CATEGORIA */}
+              {/* Botão de excluir categoria (visível apenas se showDelete for true) */}
               {showDelete && (
                 <button
                   type="button"
@@ -85,7 +121,7 @@ export function Categories({ showDelete = true }: CategoriesProps) {
                 </button>
               )}
 
-              {/* Link do Card da Categoria */}
+              {/* Link para visualização da Categoria */}
               <Link
                 to="/categoria/$slug"
                 params={{ slug: c.slug }}
