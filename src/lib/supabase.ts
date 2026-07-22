@@ -18,7 +18,6 @@ export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 
 const DELETED_CATEGORIES_KEY = "auraessence:deleted_categories";
 
-// Auxiliar para ler categorias apagadas localmente
 const getDeletedCategorySlugs = (): Set<string> => {
   if (typeof window === "undefined") return new Set();
   try {
@@ -143,13 +142,21 @@ export async function fetchCatalogFromSupabase() {
 
   const deletedSlugs = getDeletedCategorySlugs();
 
-  // 💡 FILTRAGEM RIGOROSA: Remove do retorno qualquer categoria previamente deletada
-  const filteredCategories = ((categories ?? []) as CategoryRow[]).filter(
-    (c) => !deletedSlugs.has(c.slug)
-  );
+  // Remove permanentemente e deleta de fato no banco se ainda existir lá
+  const rawCategories = (categories ?? []) as CategoryRow[];
+  const validCategories: CategoryRow[] = [];
+
+  for (const cat of rawCategories) {
+    if (deletedSlugs.has(cat.slug)) {
+      // Deleta de forma silenciosa e definitiva na tabela remota se reaparecer
+      supabase.from("categories").delete().eq("slug", cat.slug).then();
+    } else {
+      validCategories.push(cat);
+    }
+  }
 
   return {
-    categories: filteredCategories,
+    categories: validCategories,
     products: (products ?? []) as ProductRow[],
   };
 }
