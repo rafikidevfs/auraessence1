@@ -13,7 +13,6 @@ import { fetchCatalogFromSupabase, isSupabaseConfigured, supabase } from "@/lib/
 
 export const heroImage = heroImg;
 
-// Dicionário para resgatar as imagens visuais originais das categorias
 const LOCAL_CATEGORY_IMAGES: Record<string, string> = {
   skincare: catSkincare,
   perfumaria: catPerfume,
@@ -51,6 +50,7 @@ export type OrderItemInput = {
 };
 
 const CATALOG_STORAGE_KEY = "auraessence:catalog";
+const DELETED_CATEGORIES_KEY = "auraessence:deleted_categories";
 const imgs = [prod1, prod2, prod3, prod4];
 
 const buildProduct = (
@@ -105,13 +105,29 @@ const defaultSnapshot: CatalogSnapshot = {
 
 let cachedSnapshot: CatalogSnapshot | null = null;
 
+// Auxiliar para obter os slugs já deletados pelo usuário
+const getDeletedCategories = (): string[] => {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(DELETED_CATEGORIES_KEY);
+    return raw ? (JSON.parse(raw) as string[]) : [];
+  } catch {
+    return [];
+  }
+};
+
+const filterDeletedCategories = (categories: Category[]): Category[] => {
+  const deletedSlugs = new Set(getDeletedCategories());
+  return categories.filter((c) => !deletedSlugs.has(c.slug));
+};
+
 const cloneSnapshot = (snapshot: CatalogSnapshot): CatalogSnapshot => ({
   categories: snapshot.categories.map((c) => ({ ...c })),
   products: snapshot.products.map((p) => ({ ...p })),
 });
 
 const normalizeSnapshot = (snapshot: CatalogSnapshot): CatalogSnapshot => ({
-  categories: snapshot.categories.map((c) => ({ ...c })),
+  categories: filterDeletedCategories(snapshot.categories.map((c) => ({ ...c }))),
   products: snapshot.products.map((p) => ({ ...p })),
 });
 
@@ -131,7 +147,6 @@ export async function loadCatalogSnapshot(): Promise<CatalogSnapshot> {
           categories: supabaseData.categories.map((c) => ({
             slug: c.slug,
             name: c.name,
-            // Mantém a imagem enviada (URL por link); se não existir, usa fallback local
             image: c.image || LOCAL_CATEGORY_IMAGES[c.slug] || defaultSnapshot.categories.find(dc => dc.slug === c.slug)?.image || "",
             count: c.count,
           })),
@@ -175,7 +190,7 @@ export async function loadCatalogSnapshot(): Promise<CatalogSnapshot> {
     // Fall back to default
   }
 
-  cachedSnapshot = cloneSnapshot(defaultSnapshot);
+  cachedSnapshot = normalizeSnapshot(defaultSnapshot);
   if (typeof window !== "undefined") {
     window.localStorage.setItem(CATALOG_STORAGE_KEY, JSON.stringify(cachedSnapshot));
   }
@@ -185,7 +200,6 @@ export async function loadCatalogSnapshot(): Promise<CatalogSnapshot> {
 export async function saveCatalogSnapshot(snapshot: CatalogSnapshot): Promise<CatalogSnapshot> {
   const normalized = normalizeSnapshot(snapshot);
   
-  // Trata exclusão de produtos no Supabase
   if (cachedSnapshot && cachedSnapshot.products.length > normalized.products.length) {
     const currentIds = new Set(normalized.products.map((p) => p.id));
     const deletedProducts = cachedSnapshot.products.filter((p) => !currentIds.has(p.id));
@@ -196,14 +210,23 @@ export async function saveCatalogSnapshot(snapshot: CatalogSnapshot): Promise<Ca
     }
   }
 
-  // Trata exclusão de categorias no Supabase
   if (cachedSnapshot && cachedSnapshot.categories.length > normalized.categories.length) {
     const currentSlugs = new Set(normalized.categories.map((c) => c.slug));
     const deletedCategories = cachedSnapshot.categories.filter((c) => !currentSlugs.has(c.slug));
 
-    if (isSupabaseConfigured && supabase && deletedCategories.length > 0) {
+    if (deletedCategories.length > 0) {
       const deletedSlugs = deletedCategories.map((c) => c.slug);
-      await supabase.from("categories").delete().in("slug", deletedSlugs);
+      
+      // Registra na lista de categorias removidas
+      if (typeof window !== "undefined") {
+        const existingDeleted = getDeletedCategories();
+        const updatedDeleted = Array.from(new Set([...existingDeleted, ...deletedSlugs]));
+        window.localStorage.setItem(DELETED_CATEGORIES_KEY, JSON.stringify(updatedDeleted));
+      }
+
+      if (isSupabaseConfigured && supabase) {
+        await supabase.from("categories").delete().in("slug", deletedSlugs);
+      }
     }
   }
 
@@ -238,7 +261,9 @@ export async function saveCatalogSnapshot(snapshot: CatalogSnapshot): Promise<Ca
         stock: p.stock,
       }));
 
-      await supabase.from("categories").upsert(categoriesPayload, { onConflict: "slug" });
+      if (categoriesPayload.length > 0) {
+        await supabase.from("categories").upsert(categoriesPayload, { onConflict: "slug" });
+      }
       if (productsPayload.length > 0) {
         await supabase.from("products").upsert(productsPayload, { onConflict: "id" });
       }
@@ -250,19 +275,27 @@ export async function saveCatalogSnapshot(snapshot: CatalogSnapshot): Promise<Ca
   return cloneSnapshot(normalized);
 }
 
-// DELETA DEFINITIVAMENTE A CATEGORIA DO CACHE, LOCALSTORAGE E DO SUPABASE
+// DELETA DEFINITIVAMENTE A CATEGORIA
 export async function deleteCategory(slug: string): Promise<void> {
+  // 1. Marca como deletada no localStorage para o defaultSnapshot não recriar
+  if (typeof window !== "undefined") {
+    const existingDeleted = getDeletedCategories();
+    if (!existingDeleted.includes(slug)) {
+      window.localStorage.setItem(DELETED_CATEGORIES_KEY, JSON.stringify([...existingDeleted, slug]));
+    }
+  }
+
+  // 2. Apaga no Supabase
   if (isSupabaseConfigured && supabase) {
     try {
       const { error } = await supabase.from("categories").delete().eq("slug", slug);
-      if (error) {
-        console.error("Erro no Supabase ao apagar categoria:", error);
-      }
+      if (error) console.error("Erro no Supabase ao apagar categoria:", error);
     } catch (err) {
       console.error("Erro ao deletar categoria do Supabase:", err);
     }
   }
 
+  // 3. Apaga da memória cache
   if (cachedSnapshot) {
     cachedSnapshot.categories = cachedSnapshot.categories.filter((c) => c.slug !== slug);
   } else {
@@ -273,19 +306,17 @@ export async function deleteCategory(slug: string): Promise<void> {
     };
   }
 
+  // 4. Grava a lista atualizada sem ela
   if (typeof window !== "undefined") {
     window.localStorage.setItem(CATALOG_STORAGE_KEY, JSON.stringify(cachedSnapshot));
   }
 }
 
-// DELETA DEFINITIVAMENTE O PRODUTO DO CACHE, LOCALSTORAGE E DO SUPABASE
 export async function deleteProduct(id: string): Promise<void> {
   if (isSupabaseConfigured && supabase) {
     try {
       const { error } = await supabase.from("products").delete().eq("id", id);
-      if (error) {
-        console.error("Erro no Supabase ao apagar:", error);
-      }
+      if (error) console.error("Erro no Supabase ao apagar:", error);
     } catch (err) {
       console.error("Erro ao deletar do Supabase:", err);
     }
@@ -306,7 +337,6 @@ export async function deleteProduct(id: string): Promise<void> {
   }
 }
 
-// ATUALIZA DIRETO O ESTOQUE DE UM PRODUTO
 export async function updateProductStock(id: string, newStock: number): Promise<void> {
   const finalStock = Math.max(0, newStock);
 
@@ -333,7 +363,6 @@ export async function updateProductStock(id: string, newStock: number): Promise<
   }
 }
 
-// DECREMENTA O ESTOQUE COM BASE NOS ITENS DE UM PEDIDO
 export async function decrementStock(items: OrderItemInput[]): Promise<void> {
   if (!items || items.length === 0) return;
 
