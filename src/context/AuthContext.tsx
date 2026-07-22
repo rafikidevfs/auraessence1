@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   getCurrentUser,
   hydrateAuthSession,
@@ -26,28 +26,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(() => getCurrentUser());
 
   useEffect(() => {
+    let isMounted = true;
     void hydrateAuthSession().then((session) => {
-      if (session?.user) setUser(session.user);
+      if (isMounted && session?.user) {
+        setUser(session.user);
+      }
     });
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
-  const signIn = async (email: string, password: string, name?: string) => {
+  const signIn = useCallback(async (email: string, password: string, name?: string) => {
     const session = await signInWithPassword(email, password, name);
     setUser(session.user);
     return session;
-  };
+  }, []);
 
-  const signUp = async (email: string, password: string, name?: string) => {
+  const signUp = useCallback(async (email: string, password: string, name?: string) => {
     const session = await signUpWithPassword(email, password, name);
     setUser(session.user);
     return session;
-  };
+  }, []);
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     writeAuthSession(null);
     setUser(null);
     await signOutFromSupabase();
-  };
+  }, []);
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -58,7 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signUp,
       signOut,
     }),
-    [user],
+    [user, signIn, signUp, signOut]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
