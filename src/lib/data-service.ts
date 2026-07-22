@@ -13,6 +13,16 @@ import { fetchCatalogFromSupabase, isSupabaseConfigured, supabase } from "@/lib/
 
 export const heroImage = heroImg;
 
+// Dicionário para resgatar as imagens visuais originais das categorias
+const LOCAL_CATEGORY_IMAGES: Record<string, string> = {
+  skincare: catSkincare,
+  perfumaria: catPerfume,
+  maquiagem: catMakeup,
+  cabelos: catHair,
+  corpo: catBody,
+  presentes: catGifts,
+};
+
 export type Category = { slug: string; name: string; image: string; count: number };
 export type Product = {
   id: string;
@@ -118,7 +128,13 @@ export async function loadCatalogSnapshot(): Promise<CatalogSnapshot> {
       const supabaseData = await fetchCatalogFromSupabase();
       if (supabaseData) {
         const snapshot = normalizeSnapshot({
-          categories: supabaseData.categories.map((c) => ({ slug: c.slug, name: c.name, image: c.image, count: c.count })),
+          categories: supabaseData.categories.map((c) => ({
+            slug: c.slug,
+            name: c.name,
+            // Fallback: se o banco não trouxer imagem, pega do asset local!
+            image: c.image || LOCAL_CATEGORY_IMAGES[c.slug] || defaultSnapshot.categories.find(dc => dc.slug === c.slug)?.image || "",
+            count: c.count,
+          })),
           products: supabaseData.products.map((p) => ({
             id: p.id,
             name: p.name,
@@ -128,7 +144,7 @@ export async function loadCatalogSnapshot(): Promise<CatalogSnapshot> {
             oldPrice: p.old_price ?? undefined,
             rating: p.rating,
             reviews: p.reviews,
-            image: p.image,
+            image: p.image || imgs[0],
             badge: p.badge ?? undefined,
             description: p.description,
             sku: p.sku,
