@@ -105,8 +105,8 @@ const defaultSnapshot: CatalogSnapshot = {
 
 let cachedSnapshot: CatalogSnapshot | null = null;
 
-// Auxiliar para obter os slugs já deletados pelo usuário
-const getDeletedCategories = (): string[] => {
+// Helper global de exclusão de categorias
+export const getDeletedCategories = (): string[] => {
   if (typeof window === "undefined") return [];
   try {
     const raw = window.localStorage.getItem(DELETED_CATEGORIES_KEY);
@@ -279,7 +279,7 @@ export async function saveCatalogSnapshot(snapshot: CatalogSnapshot): Promise<Ca
 
 // DELETA DEFINITIVAMENTE A CATEGORIA
 export async function deleteCategory(slug: string): Promise<void> {
-  // 1. Grava imediatamente no DELETED_CATEGORIES_KEY
+  // 1. Grava no DELETED_CATEGORIES_KEY
   if (typeof window !== "undefined") {
     const existingDeleted = getDeletedCategories();
     if (!existingDeleted.includes(slug)) {
@@ -290,7 +290,7 @@ export async function deleteCategory(slug: string): Promise<void> {
     }
   }
 
-  // 2. Apaga no Supabase em segundo plano/síncrono
+  // 2. Apaga no Supabase
   if (isSupabaseConfigured && supabase) {
     try {
       await supabase.from("categories").delete().eq("slug", slug);
@@ -299,21 +299,17 @@ export async function deleteCategory(slug: string): Promise<void> {
     }
   }
 
-  // 3. Atualiza ou purga a memória cache
-  if (cachedSnapshot) {
-    cachedSnapshot.categories = cachedSnapshot.categories.filter((c) => c.slug !== slug);
-    cachedSnapshot = normalizeSnapshot(cachedSnapshot);
-  } else {
-    const snapshot = await loadCatalogSnapshot();
-    cachedSnapshot = normalizeSnapshot({
-      ...snapshot,
-      categories: snapshot.categories.filter((c) => c.slug !== slug),
-    });
-  }
+  // 3. Purga a memória cache e localStorage
+  const currentSnapshot = await loadCatalogSnapshot();
+  const updatedSnapshot = normalizeSnapshot({
+    ...currentSnapshot,
+    categories: currentSnapshot.categories.filter((c) => c.slug !== slug),
+  });
 
-  // 4. Grava no CATALOG_STORAGE_KEY a lista limpa
+  cachedSnapshot = updatedSnapshot;
+
   if (typeof window !== "undefined") {
-    window.localStorage.setItem(CATALOG_STORAGE_KEY, JSON.stringify(cachedSnapshot));
+    window.localStorage.setItem(CATALOG_STORAGE_KEY, JSON.stringify(updatedSnapshot));
   }
 }
 
@@ -394,7 +390,6 @@ export async function decrementStock(items: OrderItemInput[]): Promise<void> {
 }
 
 export async function listCategories(): Promise<Category[]> {
-  // Zera o cache em memória para forçar uma releitura com filtro do localStorage/Supabase
   cachedSnapshot = null;
   const snapshot = await loadCatalogSnapshot();
   return snapshot.categories;
