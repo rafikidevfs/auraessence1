@@ -438,4 +438,4 @@ export async function getNewArrivals(): Promise<Product[]> {
 
 export const money = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-atualiza pra mim
+
