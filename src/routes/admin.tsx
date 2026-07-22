@@ -498,7 +498,8 @@ function ProductForm({
                 }}
                 className="mt-2 w-full rounded-2xl border border-border bg-background px-4 h-12 text-sm focus:outline-none focus:border-primary"
               >
-                {categories.map((c) => (
+                
+                 {categories.map((c) => (
                   <option key={c.slug} value={c.slug}>
                     {c.name}
                   </option>
@@ -592,9 +593,11 @@ function AdminField({
 function CategoriesAdmin({
   categories,
   setCategories,
+  products,
 }: {
   categories: Category[];
   setCategories: React.Dispatch<React.SetStateAction<Category[]>>;
+  products: Product[];
 }) {
   const [name, setName] = useState("");
   const add = async (e: React.FormEvent) => {
@@ -615,16 +618,16 @@ function CategoriesAdmin({
     }
   };
   const remove = async (slug: string) => {
-  if (!confirm("Excluir categoria?")) return;
-  const nextCategories = categories.filter((c) => c.slug !== slug);
-  setCategories(nextCategories);
-  try {
-    await saveCatalogSnapshot({ categories: nextCategories, products: [] });
-    toast.success("Categoria removida");
-  } catch {
-    toast.error("Não foi possível remover a categoria");
-  }
-};
+    if (!confirm("Excluir categoria?")) return;
+    const nextCategories = categories.filter((c) => c.slug !== slug);
+    setCategories(nextCategories);
+    try {
+      await saveCatalogSnapshot({ categories: nextCategories, products });
+      toast.success("Categoria removida");
+    } catch {
+      toast.error("Não foi possível remover a categoria");
+    }
+  };
 
 return (
   <div>
