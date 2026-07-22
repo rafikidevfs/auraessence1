@@ -105,7 +105,6 @@ const defaultSnapshot: CatalogSnapshot = {
 
 let cachedSnapshot: CatalogSnapshot | null = null;
 
-// Helper global de exclusão de categorias
 export const getDeletedCategories = (): string[] => {
   if (typeof window === "undefined") return [];
   try {
@@ -174,7 +173,7 @@ export async function loadCatalogSnapshot(): Promise<CatalogSnapshot> {
         return cloneSnapshot(snapshot);
       }
     } catch {
-      // Fall back to local storage
+      // Fallback
     }
   }
 
@@ -190,7 +189,7 @@ export async function loadCatalogSnapshot(): Promise<CatalogSnapshot> {
       return cloneSnapshot(snapshot);
     }
   } catch {
-    // Fall back to default
+    // Fallback
   }
 
   cachedSnapshot = normalizeSnapshot(defaultSnapshot);
@@ -240,13 +239,19 @@ export async function saveCatalogSnapshot(snapshot: CatalogSnapshot): Promise<Ca
 
   if (isSupabaseConfigured && supabase) {
     try {
-      const categoriesPayload = normalized.categories.map((c) => ({
-        id: c.slug,
-        name: c.name,
-        slug: c.slug,
-        image: c.image,
-        count: c.count
-      }));
+      const deletedSlugsSet = new Set(getDeletedCategories());
+
+      // FILTRO DE SEGURANÇA: NUNCA envia categorias excluídas para o UPSERT
+      const categoriesPayload = normalized.categories
+        .filter((c) => !deletedSlugsSet.has(c.slug))
+        .map((c) => ({
+          id: c.slug,
+          name: c.name,
+          slug: c.slug,
+          image: c.image,
+          count: c.count
+        }));
+
       const productsPayload = normalized.products.map((p) => ({
         id: p.id,
         name: p.name,
@@ -277,9 +282,8 @@ export async function saveCatalogSnapshot(snapshot: CatalogSnapshot): Promise<Ca
   return cloneSnapshot(normalized);
 }
 
-// DELETA DEFINITIVAMENTE A CATEGORIA
 export async function deleteCategory(slug: string): Promise<void> {
-  // 1. Grava no DELETED_CATEGORIES_KEY
+  // 1. Grava no registro de excluídos
   if (typeof window !== "undefined") {
     const existingDeleted = getDeletedCategories();
     if (!existingDeleted.includes(slug)) {
@@ -299,7 +303,8 @@ export async function deleteCategory(slug: string): Promise<void> {
     }
   }
 
-  // 3. Purga a memória cache e localStorage
+  // 3. Força reset do cache em memória e normaliza
+  cachedSnapshot = null;
   const currentSnapshot = await loadCatalogSnapshot();
   const updatedSnapshot = normalizeSnapshot({
     ...currentSnapshot,
@@ -308,6 +313,7 @@ export async function deleteCategory(slug: string): Promise<void> {
 
   cachedSnapshot = updatedSnapshot;
 
+  // 4. Persiste no localStorage
   if (typeof window !== "undefined") {
     window.localStorage.setItem(CATALOG_STORAGE_KEY, JSON.stringify(updatedSnapshot));
   }
