@@ -3,7 +3,7 @@ import { ArrowUpRight } from "lucide-react";
 import { useEffect, useState } from "react";
 import { listCategories, type Category } from "@/lib/data-service";
 
-// Fallback de imagens elegantes por categoria
+// Fallback caso a categoria cadastrada não possua URL de imagem informada
 const CATEGORY_IMAGES: Record<string, string> = {
   skincare: "https://images.unsplash.com/photo-1556228720-195a672e8a03?q=80&w=800",
   perfumaria: "https://images.unsplash.com/photo-1592945403244-b3fbafd7f539?q=80&w=800",
@@ -31,11 +31,15 @@ export function Categories() {
 
   return (
     <section id="categories" className="container-page py-24">
-      <SectionHeader eyebrow="Coleções" title="Compre por categoria" subtitle="Uma curadoria pensada para cada gesto da sua rotina." />
+      <SectionHeader
+        eyebrow="Coleções"
+        title="Compre por categoria"
+        subtitle="Uma curadoria pensada para cada gesto da sua rotina."
+      />
 
       <div className="mt-12 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         {categories.map((c, i) => {
-          // Garante a imagem: do banco > do mapa local pelo slug > imagem padrão
+          // Prioridade: URL do Link (c.image) > Fallback por Slug > Imagem padrão
           const imageUrl =
             c.image ||
             CATEGORY_IMAGES[c.slug?.toLowerCase()] ||
@@ -50,7 +54,7 @@ export function Categories() {
                 i === 0 ? "col-span-2 lg:col-span-2 row-span-2" : ""
               }`}
             >
-              <div className={`${i === 0 ? "aspect-square lg:aspect-auto lg:h-full" : "aspect-[4/5]"} `}>
+              <div className={`${i === 0 ? "aspect-square lg:aspect-auto lg:h-full" : "aspect-[4/5]"}`}>
                 <img
                   src={imageUrl}
                   alt={c.name}
