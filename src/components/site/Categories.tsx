@@ -1,9 +1,10 @@
 import { Link } from "@tanstack/react-router";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { listCategories, type Category } from "@/lib/data-service";
+import { listCategories, deleteCategory, type Category } from "@/lib/data-service";
+import { cn } from "@/lib/utils";
 
-// Fallback caso a categoria cadastrada não possua URL de imagem informada
+// Fallback caso a categoria não tenha imagem informada
 const CATEGORY_IMAGES: Record<string, string> = {
   skincare: "https://images.unsplash.com/photo-1556228720-195a672e8a03?q=80&w=800",
   perfumaria: "https://images.unsplash.com/photo-1592945403244-b3fbafd7f539?q=80&w=800",
@@ -16,7 +17,12 @@ const CATEGORY_IMAGES: Record<string, string> = {
 
 const DEFAULT_IMAGE = "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?q=80&w=800";
 
-export function Categories() {
+interface CategoriesProps {
+  // Prop opcional para habilitar a opção de apagar (ex: modo Admin)
+  showDelete?: boolean; 
+}
+
+export function Categories({ showDelete = true }: CategoriesProps) {
   const [categories, setCategories] = useState<Category[]>([]);
 
   useEffect(() => {
@@ -29,6 +35,17 @@ export function Categories() {
     };
   }, []);
 
+  // 💡 FUNÇÃO QUE EXCLUI A CATEGORIA DE VERDADE
+  async function handleDeleteCategory(slug: string) {
+    if (!confirm("Tem certeza que deseja apagar esta categoria?")) return;
+
+    // 1. Apaga no Supabase, Cache e localStorage (com registro em DELETED_CATEGORIES)
+    await deleteCategory(slug);
+
+    // 2. Remove imediatamente da tela sem precisar dar F5
+    setCategories((prev) => prev.filter((c) => c.slug !== slug));
+  }
+
   return (
     <section id="categories" className="container-page py-24">
       <SectionHeader
@@ -39,42 +56,63 @@ export function Categories() {
 
       <div className="mt-12 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         {categories.map((c, i) => {
-          // Prioridade: URL do Link (c.image) > Fallback por Slug > Imagem padrão
           const imageUrl =
             c.image ||
             CATEGORY_IMAGES[c.slug?.toLowerCase()] ||
             DEFAULT_IMAGE;
 
           return (
-            <Link
+            <div
               key={c.slug}
-              to="/categoria/$slug"
-              params={{ slug: c.slug }}
               className={`group relative overflow-hidden rounded-3xl border border-border bg-surface hover-lift ${
                 i === 0 ? "col-span-2 lg:col-span-2 row-span-2" : ""
               }`}
             >
-              <div className={`${i === 0 ? "aspect-square lg:aspect-auto lg:h-full" : "aspect-[4/5]"}`}>
-                <img
-                  src={imageUrl}
-                  alt={c.name}
-                  loading="lazy"
-                  className="h-full w-full object-cover transition-transform duration-[900ms] group-hover:scale-110"
-                />
-              </div>
-              <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
-              <div className="absolute inset-x-5 bottom-5 flex items-end justify-between">
-                <div>
-                  <div className="text-xs uppercase tracking-widest text-primary">
-                    {c.count ?? 0} produtos
-                  </div>
-                  <h3 className="font-display text-2xl mt-1">{c.name}</h3>
+              {/* 💡 BOTÃO DE EXCLUIR CATEGORIA */}
+              {showDelete && (
+                <button
+                  type="button"
+                  aria-label="Apagar Categoria"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleDeleteCategory(c.slug);
+                  }}
+                  className="absolute top-3 left-3 grid h-9 w-9 place-items-center rounded-full bg-background/80 backdrop-blur border border-border text-destructive hover:bg-destructive hover:text-destructive-foreground transition-colors z-20"
+                  title="Excluir categoria"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              )}
+
+              {/* Link do Card da Categoria */}
+              <Link
+                to="/categoria/$slug"
+                params={{ slug: c.slug }}
+                className="block h-full w-full"
+              >
+                <div className={`${i === 0 ? "aspect-square lg:aspect-auto lg:h-full" : "aspect-[4/5]"}`}>
+                  <img
+                    src={imageUrl}
+                    alt={c.name}
+                    loading="lazy"
+                    className="h-full w-full object-cover transition-transform duration-[900ms] group-hover:scale-110"
+                  />
                 </div>
-                <span className="grid h-10 w-10 place-items-center rounded-full bg-background/80 border border-border group-hover:bg-primary group-hover:text-primary-foreground group-hover:border-primary transition-colors">
-                  <ArrowUpRight className="h-4 w-4" />
-                </span>
-              </div>
-            </Link>
+                <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent pointer-events-none" />
+                <div className="absolute inset-x-5 bottom-5 flex items-end justify-between pointer-events-none">
+                  <div>
+                    <div className="text-xs uppercase tracking-widest text-primary">
+                      {c.count ?? 0} produtos
+                    </div>
+                    <h3 className="font-display text-2xl mt-1">{c.name}</h3>
+                  </div>
+                  <span className="grid h-10 w-10 place-items-center rounded-full bg-background/80 border border-border group-hover:bg-primary group-hover:text-primary-foreground group-hover:border-primary transition-colors">
+                    <ArrowUpRight className="h-4 w-4" />
+                  </span>
+                </div>
+              </Link>
+            </div>
           );
         })}
       </div>
