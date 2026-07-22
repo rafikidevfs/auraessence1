@@ -44,8 +44,8 @@ export function Categories({ showDelete = false }: CategoriesProps) {
     // Apaga no Supabase, Cache e localStorage
     await deleteCategory(slug);
 
-    // Atualiza a tela instantaneamente
-    setCategories((prev) => prev.filter((c) => c.slug !== slug));
+    // Força o recarregamento completo da página para limpar o cache em memória do navegador
+    window.location.reload();
   }
 
   if (loading) {
