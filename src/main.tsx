@@ -3,7 +3,9 @@ import ReactDOM from 'react-dom/client';
 import { RouterProvider } from '@tanstack/react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { getRouter } from './router';
-import './styles.css'; // Mude para './styles.css' se o seu CSS tiver esse nome
+
+// ⚠️ ADICIONE A LINHA DO SEU ARQUIVO CSS AQUI:
+import './styles.css'; // <--- Altere para o nome real do seu arquivo .css
 
 const queryClient = new QueryClient();
 const router = getRouter();
